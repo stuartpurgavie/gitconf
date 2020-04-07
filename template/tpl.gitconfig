@@ -1,0 +1,104 @@
+# This is Git's per-user configuration file.
+[user]
+    name = {{username}}
+    email = {{useremail}}
+    signingkey = {{usersigningkey}}
+    issueprefix = {{userissueprefix}}
+[winUpdater]
+    recentlySeenVersion = 2.20.1.windows.1
+[core]
+    editor = code --wait
+    autocrlf = false
+[gpg]
+    program = {{gpgprogram}}
+[alias]
+    ##### 'MAIN' Commands
+    # Check Out Branch using team naming convention
+    cob    = "!f() { ticketnum=$1; branchName=$2; git co -b \"$(git ip)${ticketnum}/$(git em | grep -o '^[^@]*')/${branchName}\"; git or; }; f"
+    cobm   = "!f() { ticketnum=$1; branchName=$2; git co -b \"${ticketnum}/$(git em | grep -o '^[^@]*')/${branchName}\"; git or; }; f"
+    # git finish: DELETES current branch and any backups, checks out updated master. Doesn't delete commits - can always checkout by hash in emergency :)
+    finish = "!f() { git cork; b=$(git cb); if [ \"${b}\" = 'master' ]; then echo 'Cannot execute on master'; return 1; fi; git krm; git fm; git br -D ${b}; git brrd ${b}; }; f"
+    # git ss: Soft Squash using reset --soft to automatically squash everything between latest commit and master, then lets you amend the message if necessary
+    ss     = !git kc && git cl && git or && git reset --soft $(git merge-base master $(git cb)) && git cm -F "$(git tp)" && git ca
+    # git tw: Tweak a previously pushed PR on same branch (will prompt you for a new commit message)
+    tw     = !git cm -m \"Tweaked! (Change Me)\" && git ss && git pof
+    
+    ##### Remotes and Pull Requests
+    # git fm: Fetch Master and check it out
+    fm   = !git fetch --all --prune && git co master && git merge origin/master --ff-only
+    # git po: Push Origin (pof: with force flag '+' in case you've rewritten history locally through squash or reset)
+    po   = !git push origin  $(git cb)
+    pof  = !git push origin +$(git cb)
+    # git pr: DRAFT Pull Request on origin using hub binary to execute (use prf if you've previously closed a PR on this branch)
+    pr   = !git ccc 1 && git kc && git or && git po  && git hub && hub pull-request -d
+    prf  = !git ccc 1 && git kc && git or && git pof && git hub && hub pull-request -d
+    # git or: Origin Rebase using local master instead of detached origin/master branch
+    or   = !git fetch --all --prune && declare br=$(git cb) && git co master && git merge origin/master --ff-only && git co ${br} && git rebase master
+    # git up: Working with Submodules consistently
+    up   = !git pull --rebase --prune $@ && git submodule update --init --recursive
+
+    ##### Shorthand Commands
+    br   = branch
+    brrd = push origin --delete             # Branch Remote Delete
+    ca   = commit --amend
+    cb   = rev-parse --abbrev-ref HEAD      # Current Branch
+    cd   = !cd $(git dir)                   # Change Directory to git root
+    cf   = config                           # ConFig local repository
+    cg   = config --global                  # Config Global settings
+    ci   = commit
+    cm   = !git add -A && git commit        # Depending on your pattern, better than 'git commit -a'
+    co   = checkout
+    dir  = rev-parse --show-toplevel        # Show absolute path to git directory on filesystem
+    dump = cat-file -p
+    em   = config --global user.email
+    gdir = rev-parse --git-dir
+    hash = log -n 1 --pretty=format:"%H%n"  # Show full hash of current HEAD commit
+    ip = config --global user.issueprefix
+    show = diff origin master
+    st   = status
+    type = cat-file -t
+
+    ##### Branch Backup Commands
+    #    git rek: REcover latest bacKup branch
+    rek  = !git co $(git for-each-ref \"refs/heads/$(git krb)=b=*\" --sort='-refname' --format='%(refname:lstrip=2)' --count=1)
+    #    git cork: Check Out Root of bacKup branch (when in a backup branch)
+    cork = !git co $(git krb)
+    #    git kc: bacKup Create branch using naming convention '=b=##'
+    kc   = "!f() { for i in {01..99}; do d=\"$(printf '%02d' ${i})\"; declare n=\"$(git krb)=b=${d}\"; if [ $(git bx ${n}) -gt 0 ]; then break; fi; done; git br ${n} && { echo \"Backup ${d} created: '${n}'\"; } || { echo 'Backup failed' && return 1; }; }; f"
+    #    git kg: bacKup Get branches with same core name
+    kg   = !git br --list \"$(git krb)=b=*\" --format='%(refname:lstrip=2)'
+    #    git krb: bacKup Root Branch name to stdout
+    krb  = !git cb | grep -o -e '[^=]*'
+    #    git krm: bacKup ReMove all backup branch refs with core name same as current
+    krm  = "!f() { git cork; for b in $(git kg); do git br -D ${b}; done; }; f"
+    #    git ks: bacKup Swap - when on backup branch, swap current branch with detected root
+    ks   = "!f() { git kv && { hn=$(git hash); bo=$(git cb); git cork; ho=$(git hash); bn=$(git cb); git co master; git update-ref refs/heads/${bn} ${hn}; git update-ref refs/heads/${bo} ${ho}; git co ${bn}; } || echo 'Run from backup branch only'; }; f"
+    #    git kv: bacKup Validate - validates that current branch is a backup branch
+    kv   = "!f() { case \"$(git cb)\" in *'=b='*) return 0 ;; *) return 1 ;; esac ;}; f"
+    
+    ##### Tools and Intermediates
+    # git cc: Commit Count (weird edge case where doesn't detect a commit subject if it starts with a '*'?)
+    cc   = "!f() { git shortlog master..HEAD | grep -E '^[ ]+\\w+' | wc -l ;}; f"
+    # git ccc 1: Commit Count Check, accepts an interger as an argument
+    ccc  = "!f() { declare -i c=${1}; declare -i i=$(git cc); [ ${i} -eq ${c} ] && return 0 || { printf \"Commit Count since master restricted\ncounted: ${i}\nwanted: ${c}\\nuse 'git ss' first\" && return 1 ;} ;}; f"
+    # Commit message Log since master (also saves in temporary template file)
+    cl   = !git --no-pager log --format="__%s__%n%b" master..$(git cb) | tee "$(git tp)"
+    # git tp: TemPlate file location, anything inside the .git directory is ignored from commits so is 'safe' location, used for default commit message
+    tp   = !echo "$(git dir)/$(git gdir)/template"
+    
+    ##### Tests
+    # git bx: Branch Exists test
+    bx   = "!f() { branchName=$1; git show-ref --verify --quiet refs/heads/${branchName} ; e=${?}; echo ${e}; return ${e}; }; f"
+    # git hub: Check 'hub' binary installed
+    hub  = "!f() { command -v hub >/dev/null 2>&1 || { echo 'hub binary not installed'; return 1; }; }; f"
+
+    ##### Status Tools
+    hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --graph --date=short
+    ls   = log --pretty=format:"%C(yellow)%H%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate
+    lsm  = log --pretty=format:"%C(yellow)%H%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate master..HEAD
+[commit]
+    gpgsign = {{commitgpgsign}}
+[color]
+    ui = auto
+[hub]
+    protocol = ssh

@@ -1,0 +1,11 @@
+[user]
+    name = Full Name
+    email = email@address.tld
+    signingkey = GPG Private Key Fingerprint
+    issueprefix = JIRA- or just use \# for GitHub issues
+[gpg]
+    program = gpg
+[commit]
+    gpgsign = false
+[core]
+    editor = vim
